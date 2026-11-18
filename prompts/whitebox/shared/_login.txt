@@ -1,0 +1,55 @@
+Login template for white-box agents. Not @included: load_prompt() picks the
+sections that fit the run (see _build_whitebox_login in
+src/services/prompt_manager.py) and fills the {{...}} values itself.
+
+<!-- BEGIN:CODE_ONLY -->
+There is no live target in this run, so there is nothing to log in to: work from the code alone.
+<!-- END:CODE_ONLY -->
+
+<!-- BEGIN:CREDENTIALS -->
+<login>
+Logging in is only needed for work against the live target. Your source analysis never depends on it.
+
+Playwright keeps sessions between runs, so first open {{WEB_URL}} with `playwright-cli -s={{PLAYWRIGHT_SESSION}}` and check whether you are already logged in. If you are, skip the login.
+
+Account ({{LOGIN_TYPE}} login):
+- Login URL: {{LOGIN_URL}}
+- Username: `{{USERNAME}}`
+- Password: `{{PASSWORD}}`
+{{TOTP_LINE}}
+Steps:
+{{LOGIN_STEPS}}
+
+Logged in when: {{SUCCESS_CONDITION}}
+
+For `curl`, reuse the browser's session after logging in: list its cookies with the skill's cookie commands (for example `playwright-cli -s={{PLAYWRIGHT_SESSION}} cookie-list`) and send them only to {{WEB_URL}} with `-H 'Cookie: name=value; ...'`.
+<!-- END:CREDENTIALS -->
+
+<!-- BEGIN:COOKIE -->
+<login>
+The operator logged in for you (EU Login / external SSO) and supplied the session cookies below. Do not log in yourself and do not open the login page. Logging in is only needed for work against the live target; your source analysis never depends on it.
+
+Browser: before your first authenticated page, set each cookie in your session, scoped to the target host `{{TARGET_HOST}}` only (load the `playwright-cli` skill to check the exact options):
+
+```bash
+{{COOKIE_SET_COMMANDS}}
+```
+
+curl: send the same cookies only to {{WEB_URL}}, never to another host:
+
+```bash
+curl -H {{CURL_COOKIE_HEADER}} {{CURL_URL}}
+```
+
+Logged in when: {{SUCCESS_CONDITION}}
+
+If the target still treats you as logged out (a redirect to a login page, 401 or 403 on pages a user should see), the cookies have expired: do not try to log in another way; handle it as a failed login below.
+<!-- END:COOKIE -->
+
+<!-- BEGIN:ON_FAILURE -->
+If you cannot get an authenticated session, wait a few seconds and try once more. If it fails again:
+- Do not stop. Your main work is the source analysis; continue it, and use the live target only for what needs no session.
+- Record the failure (which step failed and the error shown) wherever your instructions keep results, and in your final reply, so the gap is visible.
+- Never perform authenticated actions with an unverified session, and do not try other accounts or bypass the login.
+</login>
+<!-- END:ON_FAILURE -->

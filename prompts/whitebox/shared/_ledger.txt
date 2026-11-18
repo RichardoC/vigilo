@@ -1,0 +1,81 @@
+<ledger>
+## Recording your work: `vigilo-record`
+
+Every agent in this engagement shares one findings ledger. You read and write it only through `vigilo-record`, run from the repository root (if it reports that it cannot find the repository root, `cd` there first). Do not write result files by hand: the engine builds the findings index, the review, the remediation and the report from the ledger, so anything you leave only in prose is lost.
+
+**Reading**
+
+```bash
+vigilo-record show summary                       # counts: leads open/closed, findings, unproven findings
+vigilo-record show leads --open                  # leads nobody has closed yet
+vigilo-record show leads --mine L-003,L-004      # specific leads
+vigilo-record show findings [--unproven]         # findings, each with its current verdict
+vigilo-record show finding VG-004                # one finding and its verdict
+vigilo-record show chains                        # attack chains recorded so far
+```
+
+**Writing.** Pass one JSON object (or an array of them) with `--json '...'`, `--file <path>` (inside the repository, `/tmp` or `deliverables/`), or on stdin. For anything longer than a line or two, write the JSON to `/tmp` first and use `--file`; it avoids shell-quoting mistakes.
+
+Each call prints `{"status": "ok", "ids": [...]}` or `{"status": "invalid", "problems": [...]}`. A call is all or nothing: if anything is invalid, nothing from that call is stored (no item of an array, and no `--evidence-file` write-up). Fix every listed problem (`item N:` names the array element) and send the whole call again. IDs (`L-001`, `VG-001`, `CH-01`) are assigned for you. To correct a record, record it again with the same `id` and send the complete record, not only the changed fields; the later one replaces the earlier one.
+
+Required fields are **bold**; the optional fields are worth filling in.
+
+| kind | who records it | fields |
+|------|----------------|--------|
+| `lead` | planner; investigators who spot something outside their assignment | **`title`**, **`hypothesis`**, `priority` (1 highest … 5 lowest, default 3), `files`, `entry_points`, `playbooks`, `notes`, `distinct_from` |
+| `lead-done` | investigators, once per assigned lead | **`lead_id`**, **`outcome`** (`finding`, `clean`, `inconclusive`, `out-of-scope`), `finding_ids`, `notes` |
+| `finding` | investigators | **`title`**, **`description`**, **`severity`** (`critical`, `high`, `medium`, `low`, `info`), **`location`** (`{"file": "...", "line": N}` or `"path:line"`), `category`, `cwe`, `confidence` (`high`, `medium`, `low`; default `medium`), `entry_point`, `source`, `sink`, `preconditions`, `attack_path`, `witness`, `code_fixable`, `lead_id`, `distinct_from` |
+| `verdict` | provers, once per finding | **`finding_id`**, **`verdict`**, **`summary`**, `severity`, `harness_path` (required for `confirmed`), `screenshots` (+ `--evidence-file`) |
+| `chain` | provers | **`title`**, **`narrative`**, **`severity`**, **`finding_ids`** (two or more different recorded findings), `status` (`exploited` or `potential`) |
+
+**No duplicates.** Other agents record into the same ledger at the same time, so before you record a `finding` or a `lead` look at what exists (`show findings`, `show leads`). The ledger also checks, and rejects an item that clearly matches an existing one, naming it (`looks like VG-003 (app.py:38, injection)`):
+
+- a `finding` matches when it is in the same file and either has the same `category` with a line within 5 lines, or has the same `sink` text (within 30 lines), or, when neither has a line, the same category and title;
+- a `lead` matches when its title is the same, or when it shares an entry point with an existing lead (open or closed) and names the same kind of flaw.
+
+If it is the same flaw, do not record it again: link your lead to the existing finding by closing the lead with `lead-done` and `"finding_ids": ["VG-003"]` (any recorded finding may be linked, including one from another agent; several leads may link to the same finding). If it is a different flaw, record it again with `"distinct_from": ["VG-003"]` and say in the `description` (for a lead, the `hypothesis`) how it differs. Inside one array, `"distinct_from": ["item 1"]` marks an item as different from an earlier item of the same call. `distinct_from` may only name IDs that exist.
+
+`category` is open. If one of the common labels fits (`injection`, `xss`, `authentication`, `authorization`, `ssrf`, `cryptography`, `graphql`, `websocket`, `business-logic`, `file-handling`, `deserialization`, `configuration`, `information-disclosure`) use it; otherwise write your own short label. It is kept and filed under `other`, so never force a bug into the wrong category and never drop a real bug for lack of one. `cwe` may be written as `89` or `CWE-89`; it is normalised.
+
+Example finding:
+
+```json
+{"title": "SQL injection in order search sort parameter",
+ "description": "The `sort` query parameter of GET /api/orders is interpolated into the ORDER BY clause. Parameter binding is used for the filter values but cannot protect an identifier slot, and no allowlist is applied.",
+ "category": "injection", "cwe": "CWE-89", "severity": "high", "confidence": "high",
+ "location": {"file": "app/orders/repository.py", "line": 88},
+ "entry_point": "GET /api/orders?sort=",
+ "source": "request.args['sort'] (app/orders/views.py:41)",
+ "sink": "cursor.execute(f\"... ORDER BY {sort}\") (app/orders/repository.py:88)",
+ "preconditions": ["any authenticated user"],
+ "attack_path": ["log in as any user", "GET /api/orders?sort=<payload>", "infer data from the ordering"],
+ "witness": "sort=<smallest input that shows the flaw>",
+ "code_fixable": true, "lead_id": "L-004"}
+```
+
+Example verdict, with the write-up stored alongside it:
+
+```bash
+vigilo-record verdict --file /tmp/VG-004.verdict.json --evidence-file /tmp/VG-004.md
+```
+
+```json
+{"finding_id": "VG-004", "verdict": "exploited", "severity": "high",
+ "summary": "Demonstrated end-to-end as a normal user; one sentence on what it shows.",
+ "screenshots": ["screenshots/VG-004_login-bypass.png"]}
+```
+
+Verdict values and what they mean:
+
+| verdict | meaning |
+|---------|---------|
+| `exploited` | demonstrated end-to-end against the running target |
+| `confirmed` | a source-level harness demonstrated the flaw at the sink (no live run); `harness_path` is required and the ledger rejects the verdict without it |
+| `blocked` | the flaw is real, but a security control stopped exploitation |
+| `not_testable` | the trace holds, but no live or harness test was feasible |
+| `unreachable` | the in-scope attacker cannot reach the vulnerable code |
+| `refuted` | a live or harness test ran and the flaw did not reproduce |
+| `false_positive` | not a vulnerability on inspection |
+
+`unreachable`, `refuted` and `false_positive` remove the finding from the report body, so give evidence in the summary and write-up before using them.
+</ledger>

@@ -1,0 +1,13 @@
+<tools>
+## Tools
+
+- **Code navigation.** Search with Grep/Glob to find candidates, read the lines you need, and use the LSP tool (go to definition, find references) to follow data and control flow across files precisely. Read enough to be sure and no more: the goal is a correct judgement, not a tour of the codebase.
+- **Shell.** `git` for history and provenance, `curl` and the other installed CLIs for HTTP-level work (`subfinder`, `whatweb`, `schemathesis` where they fit), and short scripts for repetitive requests. Write scratch files and scripts under `/tmp`, except files your instructions place under `deliverables/`; never put anything else in the repository.
+- **Browser (`playwright-cli` skill).** For anything that needs a real browser against the live target: logging in, multi-step flows, client-side behaviour, screenshots. Screenshots go in `deliverables/screenshots/`, with the finding ID first in the filename (for example `deliverables/screenshots/VG-004_login-bypass.png`). Load the skill to see its commands and pass `-s={{PLAYWRIGHT_SESSION}}` on every call so your session is isolated from other agents.
+- **Sub-agents (Agent tool).** Hand a sub-agent a self-contained, bounded question ("list every route under `api/` with its auth decorator", "trace this request field to every outbound call and list the checks in between") when the answer would take many reads you do not need to keep in your own context. Give each one the exact question, the starting paths and the shape of the answer you want. Run independent sub-agents in parallel by issuing several Agent calls in one message.
+- **Monitor tool.** Watch a long-running command or log for a pattern, e.g. while waiting on a blind or time-based effect.
+- **WebSearch / WebFetch.** Look up framework behaviour, library advisories and documented bypasses for the exact versions in use. Prefer primary sources: vendor docs, advisories, the library's own code.
+- **`vigilo-record`.** The one supported way to read and write the findings ledger. Where your prompt includes the ledger section, it explains the record kinds; there is no other result-file format.
+- **`save-deliverable`.** Registers the narrative documents named in your instructions: `save-deliverable --type <TYPE> --file-path <path>`. Write the file first (under `deliverables/` or `/tmp`), then register it. It prints `{"status": "success", ...}` or an error to fix.
+- **TodoWrite.** Keep a short checklist of what you were asked to cover and tick items off as you close them, so nothing is silently dropped.
+</tools>
