@@ -54,7 +54,7 @@ class SmtpMailer:
                     fh.read(), maintype="text", subtype="markdown",
                     filename=attachment_path.rsplit("/", 1)[-1],
                 )
-        with smtplib.SMTP(self.host, self.port, timeout=30) as smtp:
+        with smtplib.SMTP(self.host, self.port, timeout=10) as smtp:
             if self.starttls:
                 smtp.starttls()
             if self.user and self.password:

@@ -1,6 +1,7 @@
 """User endpoints: self (/users/me) + admin management."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import uuid
 
@@ -200,7 +201,7 @@ async def admin_reset_password(
         f"Set a new password here (link expires soon):\n{link}\n"
     )
     try:
-        mailer.send(target.email, "[Vigilo] Password reset", body, None)
+        await asyncio.to_thread(mailer.send, target.email, "[Vigilo] Password reset", body, None)
         email_sent = not isinstance(mailer, FakeMailer)
         if not email_sent:
             email_error = "SMTP not configured"

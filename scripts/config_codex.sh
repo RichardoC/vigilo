@@ -51,4 +51,9 @@ for var in CODEX_BASE_URL CODEX_WIRE_API CODEX_REASONING_EFFORT \
   sed -i '' "s|\${$var}|$value_escaped|g" "$OUTPUT_FILE"
 done
 
+# Always readable by the agent user, whoever rendered it (the entrypoint renders it
+# as root; a root-run `docker exec` would otherwise leave it root-only). It holds
+# no secret: the API key is read from the environment (env_key in the template).
+chmod 0644 "$OUTPUT_FILE" 2>/dev/null || true
+
 echo "Codex config generated: $OUTPUT_FILE"

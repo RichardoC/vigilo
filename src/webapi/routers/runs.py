@@ -83,7 +83,8 @@ async def _maybe_notify(run: Run, session: AsyncSession, mailer: Mailer) -> None
             with open(rpath, "wb") as fh:
                 fh.write(report_bytes)
         # Attach the actual report when present, so the body's "attached" is true.
-        mailer.send(msg["to"], msg["subject"], msg["body"], rpath)
+        # In a thread: smtplib blocks, and an unreachable relay would freeze the API.
+        await asyncio.to_thread(mailer.send, msg["to"], msg["subject"], msg["body"], rpath)
         run.notified = True
     except Exception as exc:  # never let a mail failure break the request, but log why
         logger.warning(

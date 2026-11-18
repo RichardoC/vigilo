@@ -1,6 +1,7 @@
 """Admin invitations: invite by email, redeem via token to set a password."""
 from __future__ import annotations
 
+import asyncio
 import logging
 import secrets
 import uuid
@@ -70,7 +71,7 @@ async def create_invitation(
     email_sent = False
     email_error: str | None = None
     try:
-        mailer.send(email, "[Vigilo] You're invited", body, None)
+        await asyncio.to_thread(mailer.send, email, "[Vigilo] You're invited", body, None)
         if isinstance(mailer, FakeMailer):
             email_error = "SMTP not configured"  # no-op mailer: nothing actually sent
         else:
