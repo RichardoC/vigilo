@@ -24,7 +24,7 @@ For each finding, choose the cheapest test that settles it:
 
 1. **Understand the claim.** Read the cited source, sink and attack path. If the code has moved or the claim is wrong, re-read the code before testing.
 2. **Prefer a live test when one is possible.** If the engagement section gives a live deployment URL, it is reachable and the flaw is reachable through it, drive the real request (curl or the browser via `playwright-cli`). Capture the request, the response and, where relevant, a screenshot (saved as described under `screenshots` below).
-3. **Fall back to a local harness when the live route is not available.** When a live request is infeasible (no deployment, a failed login, a precondition you cannot meet safely, a path only exercised by code), write the smallest self-contained harness that reaches the sink and run it. Record its path in the verdict as `harness_path` (see "The harness contract" below).
+3. **Fall back to a local harness when the live route is not available.** When a live request is infeasible (no deployment, a failed login, a precondition you cannot meet safely, a path only exercised by code), write the smallest self-contained harness that reaches the sink and run it. Record its path in the verdict as `harness_path` (see "The harness contract" below). The harness must execute the application's own vulnerable function from the checkout (import or load it and call it with the attack input), stubbing only what it cannot run (database, network, heavy dependencies). Copying the vulnerable logic into the harness, or only parsing/grepping the source, does not reproduce anything; use that only when executing the real code is infeasible, and then say so in the write-up's Limitations.
 4. **Weigh what a control does.** If a security control stops you, that is `blocked`, not `refuted`: the flaw is real but not exploitable as-is. Say exactly which control and where.
 5. **Stay honest about reachability.** If the in-scope attacker cannot reach the code, the verdict is `unreachable`, whatever the flaw. If a test ran and did not reproduce it, the verdict is `refuted`. If it is not a vulnerability on inspection, it is `false_positive`.
 
@@ -51,7 +51,34 @@ Make one `verdict` call per finding when you use `--evidence-file`: the write-up
 - `severity`: your judgement of the proven impact. It may differ from the investigator's; set it to what you demonstrated.
 - `harness_path`: required for `confirmed` (the ledger rejects the verdict without it); include it for any finding you can reproduce locally. Follow the harness contract below.
 - `screenshots`: save every browser screenshot into `deliverables/screenshots/` with the finding ID first in the filename (for example `deliverables/screenshots/VG-004_login-bypass.png`), and record the path relative to `deliverables/` (`screenshots/VG-004_login-bypass.png`).
-- The `--evidence-file` write-up goes to `deliverables/evidence/<finding-id>.md`. Write it as a short walkthrough: setup, the exact request or harness step, the observed result, and what it proves.
+- The `--evidence-file` write-up goes to `deliverables/evidence/<finding-id>.md`. It is copied into the client report, so a reader must be able to follow and repeat it without any other file. Use exactly these sections, with `##` headings, in this order:
+
+  ```markdown
+  # VG-004 evidence
+
+  ## Setup
+  Live target and account role used, or "repository checkout at commit <short hash>, no live deployment". Configuration flags or environment the test needed.
+
+  ## Steps
+  1. Numbered steps, each with the exact command in a fenced block, run from the repository root
+     (`python3 deliverables/harnesses/VG-004_harness.py`, or the full curl request).
+  2. The inputs and payloads verbatim (request body, crafted URL, token claims).
+
+  ## Observed output
+  The actual output, verbatim in a `text` block: the `VIGILO_RESULT:` line, any detail line,
+  and the key response or log lines. Never paraphrase or reconstruct it.
+
+  ## What this proves
+  One or two sentences tying the output to the claim.
+
+  ## Limitations
+  What the proof does not cover: every module, function or service the harness stubbed or
+  faked (name them, e.g. "Users model replaced by an in-memory stub; Redis replaced by a
+  client that raises RedisError"), whether the real vulnerable function was executed or only
+  its source inspected, and that no live deployment was involved (when that is so).
+  ```
+
+  Mask secrets, tokens, cookies and personal data in commands and output.
 
 **The harness contract.** After the fix is written, Vigilo re-runs each finding's harness on the fix branch to check whether the fix works, so it has to behave exactly like this:
 

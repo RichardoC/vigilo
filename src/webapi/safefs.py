@@ -107,3 +107,52 @@ def list_regular(base: str, *parts: str) -> list[str]:
         return out
     finally:
         os.close(dfd)
+
+
+def walk_regular(base: str, *parts: str, max_depth: int = 16) -> list[tuple[str, ...]]:
+    """Relative path components of every regular, non-symlink file under the directory
+    ``base/parts`` (recursive, sorted). Symlinks (to files or directories) are never
+    followed or listed; each directory is opened with ``O_NOFOLLOW`` relative to its parent."""
+    if parts and not _valid(parts):
+        return []
+    try:
+        root = os.open(os.path.realpath(base), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    except OSError:
+        return []
+    out: list[tuple[str, ...]] = []
+
+    def _walk(dfd: int, prefix: tuple[str, ...], depth: int) -> None:
+        try:
+            names = sorted(os.listdir(dfd))
+        except OSError:
+            return
+        for name in names:
+            try:
+                st = os.stat(name, dir_fd=dfd, follow_symlinks=False)
+            except OSError:
+                continue
+            if stat.S_ISREG(st.st_mode):
+                out.append((*prefix, name))
+            elif stat.S_ISDIR(st.st_mode) and depth < max_depth:
+                try:
+                    nfd = os.open(name, _DIR_FLAGS, dir_fd=dfd)
+                except OSError:
+                    continue
+                try:
+                    _walk(nfd, (*prefix, name), depth + 1)
+                finally:
+                    os.close(nfd)
+
+    dfd = root
+    try:
+        for comp in parts:
+            try:
+                nfd = os.open(comp, _DIR_FLAGS, dir_fd=dfd)
+            except OSError:
+                return []
+            os.close(dfd)
+            dfd = nfd
+        _walk(dfd, (), 0)
+        return out
+    finally:
+        os.close(dfd)

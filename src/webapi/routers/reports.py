@@ -1,6 +1,7 @@
 """Report + artifact access for a run."""
 from __future__ import annotations
 
+import asyncio
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,10 +13,12 @@ from src.webapi.auth.deps import current_active_user
 from src.webapi.db import get_async_session
 from src.webapi.models import Run, User
 from src.webapi.reports import (
+    BUNDLE_KIND,
     PATCHES_KIND,
     PATCHES_ZIP_NAME,
     open_artifact,
     available_artifacts,
+    build_bundle_zip,
     build_patches_zip,
     read_report,
 )
@@ -60,8 +63,13 @@ async def download_artifact(
     session: AsyncSession = Depends(get_async_session),
 ) -> FileResponse | StreamingResponse:
     run = await _run_or_404(run_id, session, user)
-    if kind == PATCHES_KIND:
-        buf = build_patches_zip(run.data_dir, run.session_id)
+    if kind in (PATCHES_KIND, BUNDLE_KIND):
+        if kind == PATCHES_KIND:
+            buf = await asyncio.to_thread(build_patches_zip, run.data_dir, run.session_id)
+            zip_name = PATCHES_ZIP_NAME
+        else:
+            buf = await asyncio.to_thread(build_bundle_zip, run.data_dir, run.session_id)
+            zip_name = f"vigilo-deliverables-{str(run.id)[:8]}.zip"
         if buf is None:
             raise HTTPException(status_code=404, detail="Artifact not found")
 
@@ -74,7 +82,7 @@ async def download_artifact(
 
         return StreamingResponse(
             _chunks(), media_type="application/zip",
-            headers={"Content-Disposition": f'attachment; filename="{PATCHES_ZIP_NAME}"'},
+            headers={"Content-Disposition": f'attachment; filename="{zip_name}"'},
         )
     opened = open_artifact(run.data_dir, run.session_id, kind)
     if opened is None:

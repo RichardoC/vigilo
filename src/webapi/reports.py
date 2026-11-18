@@ -7,6 +7,7 @@ full pipeline internals.
 """
 from __future__ import annotations
 
+import logging
 import mimetypes
 import os
 import tempfile
@@ -30,6 +31,10 @@ ARTIFACT_PATHS: dict[str, str] = {
 # Virtual artifact kinds (built on demand, not a single file on disk).
 PATCHES_KIND = "patches"
 PATCHES_ZIP_NAME = "patches.zip"
+BUNDLE_KIND = "bundle"
+BUNDLE_MAX_BYTES = 200 * 1024 * 1024
+
+log = logging.getLogger(__name__)
 
 
 def deliverables_dir(data_dir: str, session_id: str) -> str:
@@ -80,7 +85,44 @@ def available_artifacts(data_dir: str, session_id: str) -> list[str]:
             found.append(kind)
     if patch_names(data_dir, session_id):
         found.append(PATCHES_KIND)
+    if bundle_entries(data_dir, session_id):
+        found.append(BUNDLE_KIND)
     return found
+
+
+def bundle_entries(data_dir: str, session_id: str) -> list[tuple[str, ...]]:
+    """Regular files under ``deliverables/`` (recursive) that go into the bundle.
+    Symlinks, ``*.lock`` files and dotfiles are excluded."""
+    return [
+        p for p in safefs.walk_regular(data_dir, *_deliverable_parts(session_id))
+        if not any(c.startswith(".") for c in p) and not p[-1].endswith(".lock")
+    ]
+
+
+def build_bundle_zip(data_dir: str, session_id: str) -> BinaryIO | None:
+    """Zip of the whole deliverables/ tree (under a top ``deliverables/`` folder) in a
+    spooled temp file positioned at 0, or None when there is nothing to bundle."""
+    entries = bundle_entries(data_dir, session_id)
+    if not entries:
+        return None
+    tmp = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024)
+    total = 0
+    with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zf:
+        for rel in entries:
+            fh = open_deliverable(data_dir, session_id, *rel)
+            if fh is None:
+                continue
+            with fh:
+                remaining = BUNDLE_MAX_BYTES - total
+                data = fh.read(remaining + 1)
+            if len(data) > remaining:
+                log.warning("deliverables bundle for %s truncated at %d bytes; skipping %s and the rest",
+                            session_id, BUNDLE_MAX_BYTES, "/".join(rel))
+                break
+            total += len(data)
+            zf.writestr("deliverables/" + "/".join(rel), data)
+    tmp.seek(0)
+    return tmp
 
 
 def patch_names(data_dir: str, session_id: str) -> list[str]:

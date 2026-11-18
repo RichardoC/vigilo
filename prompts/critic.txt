@@ -155,7 +155,7 @@ Annotation schema (every field is required; use `null` or `[]` when not applicab
   "framing_correction": "Was framed as unauthenticated; actually requires a valid JWT and only leaks the requesting user's own up_api_token.",
   "rationale": "Citation matches; preconditions added (auth required); severity unchanged.",
   "evidence_supports_status": true,
-  "status_adjusted": "Exploited | Potential | Unconfirmed (Analysis) | Unconfirmed"
+  "status_adjusted": "Exploited | Confirmed (harness) | Potential | Unconfirmed (Analysis) | Unconfirmed"
 }
 ```
 
@@ -180,14 +180,15 @@ Field semantics:
 - `framing_correction` — short prose (≤2 sentences) describing how the finding was misframed. `null` if framing is correct.
 - `rationale` — short prose (≤3 sentences) summarising what the six-question pass concluded. Always populated.
 - `evidence_supports_status` — `true` if the original `status` field in the finding (Exploited / Potential / etc.) is supported by the evidence file, `false` otherwise.
-- `status_adjusted` — your corrected status bucket. Use the four legend values verbatim: `Exploited`, `Potential`, `Unconfirmed (Analysis)`, `Unconfirmed`. Start from the index entry's `status` and change it only when the evidence says so:
+- `status_adjusted` — your corrected status bucket. Use the five legend values verbatim: `Exploited`, `Confirmed (harness)`, `Potential`, `Unconfirmed (Analysis)`, `Unconfirmed`. Start from the index entry's `status` and change it only when the evidence says so:
 
   | index `status` | meaning | default `status_adjusted` |
   |---|---|---|
   | `exploited` | verdict `exploited`: demonstrated end-to-end | `Exploited` (move to `Potential` if the evidence does not actually show it) |
-  | `potential` | verdict `confirmed` (harness), `blocked` or `not_testable` | `Potential` |
+  | `potential` with verdict `confirmed` (`harness_confirmed: true`) | reproduced by running the real code with a harness, no live target | `Confirmed (harness)` (move to `Potential` and set `evidence_supports_status: false` if the harness does not actually exercise the vulnerable code, e.g. it only greps the source or re-implements the logic it claims to test) |
+  | `potential` with verdict `blocked` or `not_testable` | not reproduced | `Potential` |
   | `unconfirmed` | no verdict, code analysis only | `Unconfirmed (Analysis)`; use `Unconfirmed` when the preconditions could not be established |
-  | `suppressed` | verdict `refuted`, `false_positive` or `unreachable` | `Unconfirmed` if you confirm the suppression; if you re-promote it, `Potential` or `Unconfirmed (Analysis)` according to the evidence, never `Exploited` |
+  | `suppressed` | verdict `refuted`, `false_positive` or `unreachable` | `Unconfirmed` if you confirm the suppression; if you re-promote it, `Potential` or `Unconfirmed (Analysis)` according to the evidence, never `Exploited` or `Confirmed (harness)` |
 
   A chain's `status` (`exploited` or `potential`) maps the same way. Never report `Exploited` for a finding whose verdict was not `exploited`.
 
@@ -272,7 +273,7 @@ If any check fails, fix and re-save.
 - Be skeptical and explicit. A short rationale citing the file:line you re-read is worth more than a confident verdict with no anchor.
 - Treat configuration defaults as authoritative. If `ldap.sync_user_data = False` ships in `main.ini`, then LDAP-injection findings are conditional regardless of how the specialist phrased them.
 - Quote the specialist's own hedging language back at them when downgrading. "Specialist wrote: 'no current usage found' — demoted from High to Informational" is a defensible call.
-- Use the four legend statuses verbatim in `status_adjusted`: `Exploited`, `Potential`, `Unconfirmed (Analysis)`, `Unconfirmed`.
+- Use the five legend statuses verbatim in `status_adjusted`: `Exploited`, `Confirmed (harness)`, `Potential`, `Unconfirmed (Analysis)`, `Unconfirmed`.
 - Keep the JSON parseable. The downstream agents read it programmatically; a malformed file blocks remediation and the report.
 
 When the critique is complete and self-validation has passed, output: CRITIQUE COMPLETE

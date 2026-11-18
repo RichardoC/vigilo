@@ -99,6 +99,7 @@ export function RunDetail() {
   const [report, setReport] = useState<string | null>(null);
   const [artifacts, setArtifacts] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
   const [rail, setRail] = useState<TraceRailConfig | null>(null);
   const logScroll = useRef<HTMLDivElement>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -172,9 +173,9 @@ export function RunDetail() {
     return () => controller.abort();
   }, [id]);
 
+  const isTerminal = run ? TERMINAL.has(run.status) : false;
   useEffect(() => {
-    if (!id || !run) return;
-    if (!TERMINAL.has(run.status)) return;
+    if (!id || !isTerminal) return;
     fetch(`/api/runs/${id}/report`, { headers: { Authorization: `Bearer ${getToken()}` } })
       .then((r) => r.json())
       .then((d) => setReport(d.exists ? d.markdown : null))
@@ -183,7 +184,7 @@ export function RunDetail() {
       .then((r) => r.json())
       .then((d) => setArtifacts(Array.isArray(d.artifacts) ? d.artifacts : []))
       .catch(() => {});
-  }, [id, run]);
+  }, [id, isTerminal]);
 
   const shownLines = useMemo(
     () =>
@@ -208,14 +209,20 @@ export function RunDetail() {
     const resp = await fetch(`/api/runs/${id}/artifacts/${kind}`, {
       headers: { Authorization: `Bearer ${getToken()}` },
     });
-    if (!resp.ok) return;
+    if (!resp.ok) {
+      setDownloadError(`Download failed (${resp.status})`);
+      return;
+    }
+    setDownloadError(null);
     const blob = await resp.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = filename;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
   if (error && !run) return <p className="text-sm text-severity-critical">Could not load run: {error}</p>;
@@ -336,7 +343,16 @@ export function RunDetail() {
         <section className="card mt-8 overflow-hidden">
           <div className="flex items-center justify-between border-b border-line px-4 py-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate">Report</span>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              {downloadError && <span className="text-xs text-severity-critical">{downloadError}</span>}
+              {artifacts.includes("bundle") && (
+                <button
+                  className="btn-ghost py-1"
+                  onClick={() => downloadArtifact("bundle", `vigilo-deliverables-${id?.slice(0, 8)}.zip`)}
+                >
+                  Download all (.zip)
+                </button>
+              )}
               {artifacts.includes("patches") && (
                 <button
                   className="btn-ghost py-1"

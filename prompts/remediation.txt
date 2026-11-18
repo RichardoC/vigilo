@@ -49,7 +49,7 @@ Build your task list before writing any code.
 
 5. **Filter and prioritize.** Build a TodoWrite checklist sorted by `severity_adjusted` (from `findings_critique.json`, falling back to `severity` from the index if a finding has no annotation). Use the status tiers of the index entry's `status` (or the critique's `status_adjusted`), most certain first:
    1. `exploited` (demonstrated end-to-end): Critical, High, Medium, then Low
-   2. `potential` (the harness confirmed it, or a control blocked it, or it could not be tested): Critical, High, Medium, then Low
+   2. `potential` (the harness confirmed it — `status_adjusted: Confirmed (harness)` — or a control blocked it, or it could not be tested): Critical, High, Medium, then Low
    3. `unconfirmed` (code analysis only): Critical, High, Medium, then Low
 
    **Skip these entirely:**
@@ -59,6 +59,7 @@ Build your task list before writing any code.
    - `CH-NN` chains (chains are fixed by patching their component findings: make sure those are on your list)
    - Findings where `findings_critique.json` sets `confidence` to `defense-in-depth` or `theoretical` — these are reported in the appendix only, not patched
    - Findings that require architectural changes impossible without domain knowledge (e.g., adding a full user ownership model from scratch) — document these as "requires manual remediation" instead
+   - Behaviour the project documents as intended (for example, a permission whose documented purpose is to let users run their own code on the server). Do not patch the feature away: list it as "by design — documented behaviour" with a link or path to the documentation, and suggest hardening (sandboxing, tighter defaults, warnings) in the report instead
 
    **For `confidence: conditional` findings** — still patch them, but record the `conditional_on` value so it appears in the report. The fix is real even though exploitation requires a specific deployment configuration.
 
@@ -89,7 +90,7 @@ Steps:
 2. **CHECK if already fixed:** Examine the current code — is the vulnerability still present? If the root cause has already been addressed (by a developer or a prior fix), report "already fixed" and STOP. Do not create a branch.
 3. Create fix branch: git checkout -b {BRANCH} {BASE}   (BRANCH is fix/{FINDING_ID}, or fix/ID1-ID2 for a group)
 4. VERIFY you are on the fix branch: run `git branch --show-current` and confirm it prints `{BRANCH}`. If not, STOP and report the error.
-5. Implement the minimal, focused patch. Do NOT refactor surrounding code.
+5. Implement the minimal, focused patch. Do NOT refactor surrounding code. The patch must keep the intended functionality working for legitimate users: add the missing check, validation or binding rather than removing, disabling or admin-restricting the feature. If the only fix you can find removes or restricts a feature (e.g. dropping a user permission, making a capability admin-only), say so explicitly in your summary as a FUNCTIONALITY TRADE-OFF: what users lose, and the functionality-preserving alternative you would recommend (for example sandboxing).
 6. Verify the fix and iterate until it passes:
    a. Run syntax/lint check appropriate for the language (e.g., python -m py_compile, node --check, go vet)
    b. If a test suite exists (pytest, npm test, go test), run it and confirm no regressions
@@ -104,7 +105,7 @@ Steps:
 Fix guidance for {vuln_type}:
 {type_specific_guidance}
 
-Return a summary with: branch name, files changed (with line numbers), brief description of the fix, verification result (what you tested and the outcome), and any reusable patterns/utilities you created that later fixes could use.
+Return a summary with: branch name, files changed (with line numbers), brief description of the fix, verification result (what you tested and the outcome), any functionality trade-off (or "none"), and any reusable patterns/utilities you created that later fixes could use.
 ```
 
 ### Type-specific fix guidance to include per category
@@ -206,8 +207,9 @@ After all sub-agents have completed (or the task list is exhausted):
    - Fix branch name (`{BRANCH}`)
    - Changes made (files, lines)
    - Validation result (including the harness result, if there was a harness)
+   - **Functionality impact** — "none", or the trade-off stated plainly when the fix removes or restricts a feature (what legitimate users can no longer do, and the alternative that would preserve it)
 
-   **Skipped vulnerabilities** — table with ID and reason (infrastructure issue, chain finding, suppressed or excluded by the review, requires manual remediation).
+   **Skipped vulnerabilities** — table with ID and reason (infrastructure issue, chain finding, suppressed or excluded by the review, requires manual remediation, by design — documented behaviour).
 
    **Failed patches** — table with vuln ID and failure reason.
 
